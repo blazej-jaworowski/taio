@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 #define MAX_SET 50
 
@@ -10,17 +11,7 @@ typedef struct family {
     int set_count;
 } family;
 
-typedef int (*metric)(family *fam1, family *fam2);
-
-int set_difference(const uint8_t *set1, const uint8_t *set2) {
-    int diff_count = 0;
-    for (int i = 0; i < MAX_SET; i++) {
-        if (set1[i] != set2[i]) {
-            diff_count++;
-        }
-    }
-    return diff_count;
-}
+typedef float (*set_metric)(const uint8_t *set1, const uint8_t *set2);
 
 int set_count(const uint8_t *set) {
     int sum = 0;
@@ -32,20 +23,60 @@ int set_count(const uint8_t *set) {
     return sum;
 }
 
-int first_metric_permutations(int *permutation, int next, uint8_t *used, int size, family *fam1, family *fam2) {
+float set_difference(const uint8_t *set1, const uint8_t *set2) {
+    if (set2 == NULL) {
+        return (float) set_count(set1);
+    }
+    if (set1 == NULL) {
+        return (float) set_count(set2);
+    }
+    int diff_count = 0;
+    for (int i = 0; i < MAX_SET; i++) {
+        if (set1[i] != set2[i]) {
+            diff_count++;
+        }
+    }
+    return (float)diff_count;
+}
+
+float second_set_metric(const uint8_t *set1, const uint8_t *set2) {
+    if (set1 == NULL || set2 == NULL) {
+        return 1.0f;
+    }
+    int set1_count = 0;
+    int set2_count = 0;
+    int common_count = 0;
+    for (int i = 0; i < MAX_SET; i++) {
+        if (set1[i]) {
+            set1_count++;
+        }
+        if (set2[i]) {
+            set2_count++;
+        }
+        if (set1[i] && set2[i]) {
+            common_count++;
+        }
+    }
+    if (set1_count == 0 || set2_count == 0) {
+        return 1.0f;
+    }
+    return 1.0f - (float) common_count / (float) (set1_count < set2_count ? set1_count : set2_count);
+}
+
+float metric_permutations(int *permutation, int next, uint8_t *used, int size, family *fam1, family *fam2, set_metric m) {
     // funkcja generuje wszystkie permutacje zbiorow w rodzinie fam2 przy pomocy rekurencj
     if (next == size) {
         // ostatni etap rekurencji, liczenie metryki dla konkretnej permutacji
-        int sum = 0;
+        float sum = 0;
         for (int i = 0; i < size; i++) {
             int index = permutation[i];
-            sum += set_difference(&fam1->sets[i * MAX_SET], &fam2->sets[index * MAX_SET]);
+            sum += m(&fam1->sets[i * MAX_SET], &fam2->sets[index * MAX_SET]);
         }
         return sum;
     }
 
     // szukanie najmniejszego wyniku sposrod wszystkich permutacji z wybranymi next-1 poczatkowymi elementami
-    int min = INT32_MAX;
+    float min = INFINITY;
     for (int i = 0; i < size; i++) {
         if (used[i]) {
             // liczba juz wczesniej wybrana
@@ -53,7 +84,7 @@ int first_metric_permutations(int *permutation, int next, uint8_t *used, int siz
         }
         permutation[next] = i;
         used[i] = 1;
-        int value = first_metric_permutations(permutation, next + 1, used, size, fam1, fam2);
+        float value = metric_permutations(permutation, next + 1, used, size, fam1, fam2, m);
         if (value < min) {
             min = value;
         }
@@ -62,7 +93,7 @@ int first_metric_permutations(int *permutation, int next, uint8_t *used, int siz
     return min;
 }
 
-int first_metric(family *fam1, family *fam2) {
+float min_metric(family *fam1, family *fam2, set_metric m) {
     // zapewnienie ze fam1 jest wieksza rodzina
     if (fam1->set_count < fam2->set_count) {
         family *k = fam1;
@@ -82,7 +113,7 @@ int first_metric(family *fam1, family *fam2) {
 
     int *permutation = malloc(fam1->set_count * sizeof(int));
     uint8_t *used = calloc(fam1->set_count, 1);
-    int value = first_metric_permutations(permutation, 0, used, fam1->set_count, fam1, fam2);
+    float value = metric_permutations(permutation, 0, used, fam1->set_count, fam1, fam2, m);
     free(permutation);
     free(used);
 
@@ -91,7 +122,7 @@ int first_metric(family *fam1, family *fam2) {
     return value;
 }
 
-int first_metric_approx(family *fam1, family *fam2) {
+float metric_approx(family *fam1, family *fam2, set_metric m) {
     // zapewnienie ze fam1 jest wieksza rodzina
     if (fam1->set_count < fam2->set_count) {
         family *k = fam1;
@@ -100,10 +131,10 @@ int first_metric_approx(family *fam1, family *fam2) {
     }
 
     uint8_t *set_used = calloc(sizeof(int), fam1->set_count);
-    int *chosen_dist = malloc(fam2->set_count * sizeof(int));
+    float *chosen_dist = malloc(fam2->set_count * sizeof(float));
     for (int i = 0; i < fam2->set_count; i++) {
         // wybieranie dla zbioru nr i z fam2 zbioru z fam1 o najmniejszym dystansie
-        int min_dist = INT32_MAX;
+        float min_dist = INFINITY;
         int min_set;
 
         for (int j = 0; j < fam1->set_count; j++) {
@@ -111,7 +142,7 @@ int first_metric_approx(family *fam1, family *fam2) {
                 continue;
             }
 
-            int dist = set_difference(&fam2->sets[i * MAX_SET], &fam1->sets[j * MAX_SET]);
+            float dist = m(&fam2->sets[i * MAX_SET], &fam1->sets[j * MAX_SET]);
             if (dist < min_dist) {
                 min_dist = dist;
                 min_set = j;
@@ -122,14 +153,14 @@ int first_metric_approx(family *fam1, family *fam2) {
         chosen_dist[i] = min_dist;
     }
 
-    int sum = 0;
+    float sum = 0;
     for (int i = 0; i < fam2->set_count; i++) {
         sum += chosen_dist[i];
     }
 
     for (int i = 0; i < fam1->set_count; i++) {
         if (!set_used[i]) {
-            sum += set_count(&fam1->sets[i * MAX_SET]);
+            sum += m(&fam1->sets[i * MAX_SET], NULL);
         }
     }
 
@@ -268,7 +299,29 @@ int main() {
         print_family(families[i]);
     }
 
-    printf("\n0. Pierwsza metryka\n1. Aproksymacja pierwszej metryki\n2. Porownanie\n> ");
+    set_metric chosen_set_metric;
+    printf("\n0. Pierwsza metryka\n1. Druga matryka\n> ");
+    while (1) {
+        scanf("%u", &option);
+        if (option > 1) {
+            printf("Niewlasciwa opcja\n> ");
+            continue;
+        }
+        break;
+    }
+
+    switch(option) {
+        case 0:
+            chosen_set_metric = set_difference;
+            break;
+        case 1:
+            chosen_set_metric = second_set_metric;
+            break;
+        default:
+            return EXIT_FAILURE;
+    }
+
+    printf("\n0. Algorytm o zlozonosci wykladniczej\n1. Aproksymacja\n2. Porownanie\n> ");
     while (1) {
         scanf("%u", &option);
         if (option > 2) {
@@ -282,15 +335,15 @@ int main() {
         for (int j = i + 1; j < family_count; j++) {
             switch (option) {
                 case 0:
-                    printf("Odleglosc pomiedzy rodzinami %d i %d: %d\n", i, j, first_metric(&families[i], &families[j]));
+                    printf("Odleglosc pomiedzy rodzinami %d i %d: %f\n", i, j, min_metric(&families[i], &families[j], chosen_set_metric));
                     break;
                 case 1:
-                    printf("Odleglosc pomiedzy rodzinami %d i %d: %d\n", i, j, first_metric_approx(&families[i], &families[j]));
+                    printf("Odleglosc pomiedzy rodzinami %d i %d: %f\n", i, j, metric_approx(&families[i], &families[j], chosen_set_metric));
                     break;
                 case 2:
-                    printf("Odleglosc pomiedzy rodzinami %d i %d: %d, %d\n", i, j,
-                           first_metric(&families[i], &families[j]),
-                           first_metric_approx(&families[i], &families[j]));
+                    printf("Odleglosc pomiedzy rodzinami %d i %d: %f, %f\n", i, j,
+                           min_metric(&families[i], &families[j], chosen_set_metric),
+                           metric_approx(&families[i], &families[j], chosen_set_metric));
                     break;
                 default:
                     return EXIT_FAILURE;
