@@ -1,4 +1,5 @@
 import random
+import sys
 
 
 def generate(nfamilies, maxsets, maxelements):
@@ -30,4 +31,7 @@ def generate_and_write(nfamilies, maxsets, maxelements, filename):
                 f.write(f'%d\n' % s[-1])
 
 
-generate_and_write(4, 7, 20, 'example.txt')
+if len(sys.argv) < 5:
+    print("Użycie: python3 generate.py ILE_RODZIN MAX_ZBIOROW MAX_ELEMENTOW SCIEZKA")
+
+generate_and_write(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4])

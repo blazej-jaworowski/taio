@@ -14,6 +14,9 @@ typedef struct family {
 typedef float (*set_metric)(const uint8_t *set1, const uint8_t *set2);
 
 int set_count(const uint8_t *set) {
+    if (set == NULL) {
+        return 0;
+    }
     int sum = 0;
     for (int i = 0; i < MAX_SET; i++) {
         if (set[i] > 0) {
@@ -23,7 +26,7 @@ int set_count(const uint8_t *set) {
     return sum;
 }
 
-float set_difference(const uint8_t *set1, const uint8_t *set2) {
+float first_set_metric(const uint8_t *set1, const uint8_t *set2) {
     if (set2 == NULL) {
         return (float) set_count(set1);
     }
@@ -40,6 +43,30 @@ float set_difference(const uint8_t *set1, const uint8_t *set2) {
 }
 
 float second_set_metric(const uint8_t *set1, const uint8_t *set2) {
+    if (set2 == NULL) {
+        return (float) set_count(set1);
+    }
+    if (set1 == NULL) {
+        return (float) set_count(set2);
+    }
+    int set1_count = 0;
+    int set2_count = 0;
+    int common_count = 0;
+    for (int i = 0; i < MAX_SET; i++) {
+        if (set1[i]) {
+            set1_count++;
+        }
+        if (set2[i]) {
+            set2_count++;
+        }
+        if (set1[i] && set2[i]) {
+            common_count++;
+        }
+    }
+    return (float) ((set1_count < set2_count ? set2_count : set1_count) - common_count);
+}
+
+float third_set_metric(const uint8_t *set1, const uint8_t *set2) {
     if (set1 == NULL || set2 == NULL) {
         return 1.0f;
     }
@@ -300,7 +327,7 @@ int main() {
     }
 
     set_metric chosen_set_metric;
-    printf("\n0. Pierwsza metryka\n1. Druga matryka\n> ");
+    printf("\n0. Pierwsza metryka\n1. Druga matryka\n2. Trzecia metryka\n> ");
     while (1) {
         scanf("%u", &option);
         if (option > 1) {
@@ -312,10 +339,13 @@ int main() {
 
     switch(option) {
         case 0:
-            chosen_set_metric = set_difference;
+            chosen_set_metric = first_set_metric;
             break;
-        case 1:
+            case 1:
             chosen_set_metric = second_set_metric;
+            break;
+        case 2:
+            chosen_set_metric = third_set_metric;
             break;
         default:
             return EXIT_FAILURE;
@@ -341,7 +371,7 @@ int main() {
                     printf("Odleglosc pomiedzy rodzinami %d i %d: %f\n", i, j, metric_approx(&families[i], &families[j], chosen_set_metric));
                     break;
                 case 2:
-                    printf("Odleglosc pomiedzy rodzinami %d i %d: %f, %f\n", i, j,
+                    printf("Odleglosc pomiedzy rodzinami %d i %d: metryka: %f, aproksymacja: %f\n", i, j,
                            min_metric(&families[i], &families[j], chosen_set_metric),
                            metric_approx(&families[i], &families[j], chosen_set_metric));
                     break;
